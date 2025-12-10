@@ -8,9 +8,19 @@ OUTPUT_FILE = "radiology_510k.csv"
 # Endpoint da API openFDA 510(k)
 BASE_URL = "https://api.fda.gov/device/510k.json"
 
+
 def fetch_radiology_510k(days_back=1, max_records=1000):
-    end_date = datetime.utcnow().date()
-    start_date = end_date - timedelta(days=days_back)
+    """
+    Busca registros de 510(k) relacionados a Radiology
+    em uma janela de dias para trás, usando openFDA.
+    Se a API der erro (ex.: 500), tratamos e retornamos lista vazia
+    para não quebrar o workflow.
+    """
+    # Em vez de usar "hoje", vamos usar ATÉ ONTEM,
+    # porque hoje pode ainda não ter dados e às vezes causa erro.
+    today_utc = datetime.utcnow().date()
+    end_date = today_utc - timedelta(days=1)            # ontem
+    start_date = end_date - timedelta(days=days_back-1) # janela para trás
 
     end_str = end_date.strftime("%Y%m%d")
     start_str = start_date.strftime("%Y%m%d")
@@ -20,13 +30,25 @@ def fetch_radiology_510k(days_back=1, max_records=1000):
         f"decision_date:[{start_str}+TO+{end_str}]"
     )
 
-    params = {"search": query, "limit": max_records}
+    params = {
+        "search": query,
+        "limit": max_records,
+    }
 
     print(f"Buscando dados de {start_str} até {end_str}...")
 
-    r = requests.get(BASE_URL, params=params)
-    r.raise_for_status()
-    data = r.json()
+    try:
+        r = requests.get(BASE_URL, params=params, timeout=30)
+        r.raise_for_status()
+        data = r.json()
+    except requests.HTTPError as e:
+        # Se a API do FDA estiver instável, não derruba o workflow
+        print(f"HTTPError ao chamar openFDA: {e}")
+        return []
+    except Exception as e:
+        # Qualquer outro erro de rede/parse
+        print(f"Erro geral ao chamar openFDA: {e}")
+        return []
 
     results = data.get("results", [])
     print(f"Encontrados {len(results)} registros.")
@@ -34,6 +56,9 @@ def fetch_radiology_510k(days_back=1, max_records=1000):
 
 
 def save_to_csv(records, filename=OUTPUT_FILE):
+    """
+    Salva os registros em um CSV simples.
+    """
     fieldnames = [
         "k_number",
         "applicant",
@@ -61,7 +86,9 @@ def save_to_csv(records, filename=OUTPUT_FILE):
 
 
 def main():
-    records = fetch_radiology_510k(days_back=1)
+    # 1 dia para trás = ontem apenas
+    records = fetch_radiology_510k(days_back=1, max_records=1000)
+    # Mesmo se vier lista vazia, ainda salvamos um CSV com cabeçalho
     save_to_csv(records, OUTPUT_FILE)
 
 
