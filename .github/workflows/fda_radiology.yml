@@ -2,9 +2,12 @@ name: FDA Radiology 510k Daily
 
 on:
   schedule:
-    # Roda todo dia às 13:00 UTC (ajuste se quiser outro horário)
+    # Roda todo dia às 13:00 UTC
     - cron: "0 13 * * *"
   workflow_dispatch: {}
+
+permissions:
+  contents: write
 
 jobs:
   build:
